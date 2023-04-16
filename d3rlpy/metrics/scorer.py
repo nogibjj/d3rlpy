@@ -487,6 +487,186 @@ def evaluate_on_environment(
 
     return scorer
 
+def evaluate_on_environment_true_q(
+    env: gym.Env, n_trials: int = 10, epsilon: float = 0.0, render: bool = False
+) -> Callable[..., float]:
+    """Returns scorer function of evaluation on environment.
+
+    This function returns scorer function, which is suitable to the standard
+    scikit-learn scorer function style.
+    The metrics of the scorer function is ideal metrics to evaluate the
+    resulted policies.
+
+    .. code-block:: python
+
+        import gym
+
+        from d3rlpy.algos import DQN
+        from d3rlpy.metrics.scorer import evaluate_on_environment
+
+
+        env = gym.make('CartPole-v0')
+
+        scorer = evaluate_on_environment(env)
+
+        cql = CQL()
+
+        mean_episode_return = scorer(cql)
+
+
+    Args:
+        env: gym-styled environment.
+        n_trials: the number of trials.
+        epsilon: noise factor for epsilon-greedy policy.
+        render: flag to render environment.
+
+    Returns:
+        scoerer function.
+
+
+    """
+
+    # for image observation
+    observation_shape = env.observation_space.shape
+    is_image = len(observation_shape) == 3
+
+    def scorer(algo: AlgoProtocol, *args: Any) -> float:
+        if is_image:
+            stacked_observation = StackedObservation(
+                observation_shape, algo.n_frames
+            )
+
+        true_q = []
+        n_trials = 0
+        for _ in range(n_trials):
+            observation = env.reset()
+            step_reward = 0.0
+            # step_rewards = [step_reward]
+
+            # frame stacking
+            if is_image:
+                stacked_observation.clear()
+                stacked_observation.append(observation)
+
+            while True:
+                # take action
+                if np.random.random() < epsilon:
+                    action = env.action_space.sample()
+                else:
+                    if is_image:
+                        action = algo.predict([stacked_observation.eval()])[0]
+                    else:
+                        action = algo.predict([observation])[0]
+
+                observation, reward, done, _ = env.step(action)
+                step_reward += algo.gamma*reward
+                # step_rewards.append(step_reward)
+
+                if is_image:
+                    stacked_observation.append(observation)
+
+                if render:
+                    env.render()
+
+                if done:
+                    break
+            true_q.append(step_reward)
+        # true_q = np.array(true_q)
+        # return np.mean(true_q,axis = 0)
+        return np.mean(true_q)
+
+    return scorer
+
+def evaluate_on_environment_estimate_q(
+    env: gym.Env, n_trials: int = 10, epsilon: float = 0.0, render: bool = False
+) -> Callable[..., float]:
+    """Returns scorer function of evaluation on environment.
+
+    This function returns scorer function, which is suitable to the standard
+    scikit-learn scorer function style.
+    The metrics of the scorer function is ideal metrics to evaluate the
+    resulted policies.
+
+    .. code-block:: python
+
+        import gym
+
+        from d3rlpy.algos import DQN
+        from d3rlpy.metrics.scorer import evaluate_on_environment
+
+
+        env = gym.make('CartPole-v0')
+
+        scorer = evaluate_on_environment(env)
+
+        cql = CQL()
+
+        mean_episode_return = scorer(cql)
+
+
+    Args:
+        env: gym-styled environment.
+        n_trials: the number of trials.
+        epsilon: noise factor for epsilon-greedy policy.
+        render: flag to render environment.
+
+    Returns:
+        scoerer function.
+
+
+    """
+
+    # for image observation
+    observation_shape = env.observation_space.shape
+    is_image = len(observation_shape) == 3
+
+    def scorer(algo: AlgoProtocol, *args: Any) -> float:
+        if is_image:
+            stacked_observation = StackedObservation(
+                observation_shape, algo.n_frames
+            )
+
+        estimate_q = []
+        n_trials = 0
+        for _ in range(n_trials):
+            observation = env.reset()
+            # estimate_reward = []
+
+            # frame stacking
+            if is_image:
+                stacked_observation.clear()
+                stacked_observation.append(observation)
+
+            while True:
+                # take action
+                if np.random.random() < epsilon:
+                    action = env.action_space.sample()
+                else:
+                    if is_image:
+                        action = algo.predict([stacked_observation.eval()])[0]
+                    else:
+                        action = algo.predict([observation])[0]
+                
+                observation, reward, done, _ = env.step(action)
+
+                next_values = algo.predict_value([observation], [action])[0]
+
+                if is_image:
+                    stacked_observation.append(observation)
+
+                if render:
+                    env.render()
+
+                if done:
+                    break
+                # estimate_reward.append(next_values)
+            estimate_q.append(next_values)
+        # estimate_q = np.array(estimate_q)
+        # return np.mean(estimate_q,axis = 0)
+        return np.mean(estimate_q)
+
+    return scorer
+
 
 def dynamics_observation_prediction_error_scorer(
     dynamics: DynamicsProtocol, episodes: List[Episode]
